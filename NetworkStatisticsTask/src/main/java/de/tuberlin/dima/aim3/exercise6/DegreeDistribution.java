@@ -34,7 +34,9 @@ import org.apache.flink.types.NullValue;
 import org.apache.flink.types.LongValue;
 import org.apache.flink.util.Collector;
 
+import java.io.PrintWriter;
 import java.util.Iterator;
+import java.util.List;
 import java.util.regex.Pattern;
 
 public class DegreeDistribution {
@@ -56,6 +58,9 @@ public class DegreeDistribution {
 
         DataSet<Tuple2<Long,LongValue>> degrees = graph.getDegrees();
 
+        degrees.writeAsCsv(Config.outputPath()+"test_degree_dist.csv", FileSystem.WriteMode.OVERWRITE)
+                .setParallelism(1);
+
         DataSet<Long> totVertices = graph.getVertices().reduceGroup(new CountVertices());
 
         DataSet<Tuple2<Long, Double>> degreeDistribution =
@@ -67,10 +72,31 @@ public class DegreeDistribution {
                 .setParallelism(1);
 
 		/* Calculate the average degree and write to file */
-		// IMPLEMENT ME	
+        List<Tuple2<Long, LongValue>> data= degrees.collect();
+        Iterator<Tuple2<Long, LongValue>> i=data.listIterator();
+        double degreeSum=0;
+        long max=1l;
+        int count=0;
+        double avg_degree=0;
+        while(i.hasNext())
+        { if(max<i.next().f1.getValue())
+        {
+            max=i.next().f1.getValue();
+        }
+            degreeSum =degreeSum+ i.next().f1.getValue();
+            count++;
+
+        }
+        avg_degree=degreeSum/count;
+        System.out.println("avg"+avg_degree);
+        System.out.println("max"+max);
+        PrintWriter writer = new PrintWriter(Config.outputPath()+"avg_degree.txt", "UTF-8");
+        writer.write(Double.toString(avg_degree));
 				
 		/*Calculate the max degree and write to file */
-		// IMPLEMENT ME
+        writer = new PrintWriter(Config.outputPath()+"max_degree.txt", "UTF-8");
+        writer.write(Double.toString(max));
+        writer.close();
 				
         env.execute();
     }
@@ -102,9 +128,11 @@ public class DegreeDistribution {
     public static class CountVertices implements GroupReduceFunction<Vertex<Long,NullValue>, Long> {
         @Override
         public void reduce(Iterable<Vertex<Long,NullValue>> vertices, Collector<Long> collector) throws Exception {
+
             collector.collect(new Long(Iterables.size(vertices)));
         }
     }
+
 
     public static class DistributionElement extends RichGroupReduceFunction<Tuple2<Long, LongValue>, Tuple2<Long, Double>> {
         private long totVertices;
@@ -118,6 +146,7 @@ public class DegreeDistribution {
 
         @Override
         public void reduce(Iterable<Tuple2<Long, LongValue>> verticesWithDegree, Collector<Tuple2<Long, Double>> collector) throws Exception {
+
             Iterator<Tuple2<Long, LongValue>> iterator = verticesWithDegree.iterator();
             Long degree = iterator.next().f1.getValue();
             long count = 1L;
@@ -128,4 +157,7 @@ public class DegreeDistribution {
             collector.collect(new Tuple2<Long, Double>(degree, (double) count / totVertices));
         }
     }
+
+
+
 }
